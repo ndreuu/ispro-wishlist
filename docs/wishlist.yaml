@@ -1,0 +1,195 @@
+openapi: 3.0.3
+info:
+  title: Wishlist Service
+  version: 0.0.1
+  description: Service for managing wishlists and wishlist items.
+
+servers:
+  - url: http://localhost:8080
+    description: Локальный сервер
+
+paths:
+  /wishlists:
+    get:
+      summary: Получение списка вишлистов
+      operationId: getWishlists
+      responses:
+        "200":
+          description: Список вишлистов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Wishlist"
+
+    post:
+      summary: Создание нового вишлиста
+      operationId: createWishlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWishlistRequest"
+      responses:
+        "201":
+          description: Вишлист успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wishlist"
+
+  /wishlists/{wishlistId}:
+    get:
+      summary: Получение вишлиста по id
+      operationId: getWishlistById
+      parameters:
+        - name: wishlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Вишлист найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wishlist"
+        "404":
+          description: Вишлист не найден
+
+    delete:
+      summary: Удаление вишлиста
+      operationId: deleteWishlist
+      parameters:
+        - name: wishlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: Вишлист удален
+        "404":
+          description: Вишлист не найден
+
+  /wishlists/{wishlistId}/items:
+    post:
+      summary: Добавление элемента в вишлист
+      operationId: addWishlistItem
+      parameters:
+        - name: wishlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWishlistItemRequest"
+      responses:
+        "201":
+          description: Элемент добавлен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WishlistItem"
+        "404":
+          description: Вишлист не найден
+
+  /wishlists/{wishlistId}/items/{itemId}:
+    delete:
+      summary: Удаление элемента из вишлиста
+      operationId: deleteWishlistItem
+      parameters:
+        - name: wishlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: Элемент удален
+        "404":
+          description: Вишлист или элемент не найден
+
+components:
+  schemas:
+    Wishlist:
+      type: object
+      required:
+        - id
+        - name
+        - owner
+        - items
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        owner:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WishlistItem"
+
+    WishlistItem:
+      type: object
+      required:
+        - id
+        - title
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        url:
+          type: string
+        price:
+          type: number
+          format: double
+        comment:
+          type: string
+
+    CreateWishlistRequest:
+      type: object
+      required:
+        - name
+        - owner
+      properties:
+        name:
+          type: string
+        owner:
+          type: string
+
+    CreateWishlistItemRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        url:
+          type: string
+        price:
+          type: number
+          format: double
+        comment:
+          type: string
