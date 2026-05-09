@@ -2,12 +2,19 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"wishlist-service/api"
 )
+
+var logger *slog.Logger
+
+func SetLogger(l *slog.Logger) {
+	logger = l
+}
 
 type WishlistHandler struct {
 	mu             sync.Mutex
@@ -58,6 +65,10 @@ func (h *WishlistHandler) CreateWishlist(w http.ResponseWriter, r *http.Request)
 	start := time.Now()
 	var req api.CreateWishlistRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logger.Warn("Failed to decode create wishlist request",
+			slog.String("error", err.Error()),
+			slog.String("remote_addr", r.RemoteAddr),
+		)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		IncRequests("createWishlist", "POST", "400")
 		return
@@ -82,6 +93,13 @@ func (h *WishlistHandler) CreateWishlist(w http.ResponseWriter, r *http.Request)
 	// Бизнес-метрики
 	wishlistsCreatedTotal.Inc()
 
+	// Бизнес-лог
+	logger.Info("Wishlist created",
+		slog.Int64("wishlist_id", id),
+		slog.String("name", req.Name),
+		slog.String("owner", req.Owner),
+	)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	err := json.NewEncoder(w).Encode(wishlist)
@@ -101,10 +119,20 @@ func (h *WishlistHandler) GetWishlistById(w http.ResponseWriter, r *http.Request
 
 	wishlist, ok := h.wishlists[wishlistId]
 	if !ok {
+		logger.Warn("Wishlist not found",
+			slog.Int64("wishlist_id", wishlistId),
+		)
 		http.Error(w, "wishlist not found", http.StatusNotFound)
 		IncRequests("getWishlistById", "GET", "404")
 		return
 	}
+
+	// Бизнес-лог
+	logger.Info("Wishlist retrieved",
+		slog.Int64("wishlist_id", wishlistId),
+		slog.String("name", wishlist.Name),
+		slog.Int("items_count", len(wishlist.Items)),
+	)
 
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(wishlist)
@@ -128,10 +156,17 @@ func (h *WishlistHandler) DeleteWishlist(w http.ResponseWriter, r *http.Request,
 	defer h.mu.Unlock()
 
 	if _, ok := h.wishlists[wishlistId]; !ok {
+		logger.Warn("Wishlist not found for delete",
+			slog.Int64("wishlist_id", wishlistId),
+		)
 		http.Error(w, "wishlist not found", http.StatusNotFound)
 		IncRequests("deleteWishlist", "DELETE", "404")
 		return
 	}
+
+	logger.Info("Wishlist deleted",
+		slog.Int64("wishlist_id", wishlistId),
+	)
 
 	delete(h.wishlists, wishlistId)
 	updateWishlistsMetric(len(h.wishlists))
@@ -145,6 +180,10 @@ func (h *WishlistHandler) AddWishlistItem(w http.ResponseWriter, r *http.Request
 	start := time.Now()
 	var req api.CreateWishlistItemRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logger.Warn("Failed to decode add item request",
+			slog.String("error", err.Error()),
+			slog.String("remote_addr", r.RemoteAddr),
+		)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		IncRequests("addWishlistItem", "POST", "400")
 		return
@@ -155,6 +194,9 @@ func (h *WishlistHandler) AddWishlistItem(w http.ResponseWriter, r *http.Request
 
 	wishlist, ok := h.wishlists[wishlistId]
 	if !ok {
+		logger.Warn("Wishlist not found for add item",
+			slog.Int64("wishlist_id", wishlistId),
+		)
 		http.Error(w, "wishlist not found", http.StatusNotFound)
 		IncRequests("addWishlistItem", "POST", "404")
 		return
@@ -176,6 +218,13 @@ func (h *WishlistHandler) AddWishlistItem(w http.ResponseWriter, r *http.Request
 
 	// Бизнес-метрики
 	itemsAddedTotal.Inc()
+
+	// Бизнес-лог
+	logger.Info("Item added to wishlist",
+		slog.Int64("wishlist_id", wishlistId),
+		slog.Int64("item_id", itemID),
+		slog.String("title", req.Title),
+	)
 
 	// Обновляем метрики
 	totalItems := 0
@@ -203,6 +252,9 @@ func (h *WishlistHandler) DeleteWishlistItem(w http.ResponseWriter, r *http.Requ
 
 	wishlist, ok := h.wishlists[wishlistId]
 	if !ok {
+		logger.Warn("Wishlist not found for delete item",
+			slog.Int64("wishlist_id", wishlistId),
+		)
 		http.Error(w, "wishlist not found", http.StatusNotFound)
 		IncRequests("deleteWishlistItem", "DELETE", "404")
 		return
@@ -217,10 +269,19 @@ func (h *WishlistHandler) DeleteWishlistItem(w http.ResponseWriter, r *http.Requ
 	}
 
 	if index == -1 {
+		logger.Warn("Item not found for delete",
+			slog.Int64("wishlist_id", wishlistId),
+			slog.Int64("item_id", itemId),
+		)
 		http.Error(w, "item not found", http.StatusNotFound)
 		IncRequests("deleteWishlistItem", "DELETE", "404")
 		return
 	}
+
+	logger.Info("Item deleted from wishlist",
+		slog.Int64("wishlist_id", wishlistId),
+		slog.Int64("item_id", itemId),
+	)
 
 	wishlist.Items = append(wishlist.Items[:index], wishlist.Items[index+1:]...)
 	h.wishlists[wishlistId] = wishlist

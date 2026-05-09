@@ -35,7 +35,7 @@ Swagger UI доступен по адресу:
 http://localhost:8080/swagger/index.html
 ```
 
-## Lab3 Monitoring
+## Lab 3: Monitoring
 
 Сервис предоставляет Prometheus метрики и Grafana dashboard для мониторинга.
 
@@ -72,3 +72,30 @@ histogram_quantile(0.95, sum(rate(wishlist_service_items_in_response_bucket[5m])
 ![alt text](monitoring/image.png)
 ![alt text](monitoring/image-1.png)
 ![alt text](monitoring/image-2.png)
+
+## Lab 4: Логирование и LogQL
+
+Сервис предоставляет структурированное логирование с отправкой в Grafana Loki.
+
+| Компонент | Версия | Назначение |
+|-----------|--------|------------|
+| **Go** | 1.21+ | Приложение (slog для логирования) |
+| **Loki** | 2.9.8 | Хранилище логов |
+| **Promtail** | 2.9.8 | Сбор и отправка логов в Loki |
+| **Grafana** | 10.4.2 | Визуализация логов и метрик |
+| **Prometheus** | 2.52.0 | Хранение метрик (для Lab 3) |
+| **Docker Compose** | - | Оркестрация инфраструктуры |
+
+### Типы логов
+- HTTP запросы (method, path, status, duration, remote_addr)
+- Бизнес-события (создание/чтение/удаление вишлистов и элементов)
+- Ошибки (WARN уровень)
+
+#### Все логи
+![alt text](image.png)
+
+#### Warn логи
+![alt text](image-1.png)
+
+#### Success Rate
+![alt text](image-2.png)

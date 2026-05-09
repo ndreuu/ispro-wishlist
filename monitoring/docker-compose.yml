@@ -13,6 +13,17 @@ services:
     networks:
       - monitoring
 
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yml:/etc/loki/config.yml
+    command: -config.file=/etc/loki/config.yml
+    networks:
+      - monitoring
+
   grafana:
     image: grafana/grafana:10.4.2
     container_name: grafana
@@ -26,6 +37,20 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       - prometheus
+      - loki
+    networks:
+      - monitoring
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    container_name: promtail
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml
+      - /Users/a.p.oleynikov/projects/myshit/ispro-wishlist/logs:/var/log/wishlist
+      - /var/log:/var/log/flog
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
     networks:
       - monitoring
 
