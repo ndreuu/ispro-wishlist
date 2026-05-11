@@ -99,3 +99,27 @@ histogram_quantile(0.95, sum(rate(wishlist_service_items_in_response_bucket[5m])
 
 #### Success Rate
 ![alt text](image-2.png)
+
+## Lab 5: Trace
+
+Сервис предоставляет distributed tracing с использованием OpenTelemetry и Grafana Tempo.
+
+| Компонент          | Версия | Назначение                     |
+| ------------------ | ------ | ------------------------------ |
+| **OpenTelemetry**  | 1.43.0 | Создание и экспорт трейсов     |
+| **Tempo**          | 2.4.0  | Хранилище трейсов              |
+
+### Реализованные spans
+- `wishlist.create` – root span создания wishlist
+- `wishlist.decode_request` – декодирование JSON request body
+- `wishlist.save_in_memory` – сохранение wishlist в memory storage
+- `wishlist.update_metrics` – обновление Prometheus метрик
+- `wishlist.write_response` – формирование HTTP response
+
+### Все трейсы сервиса
+`{ resource.service.name = "wishlist-service" }`
+![alt text](image-3.png)
+
+### Медленные трейсы
+`{ resource.service.name = "wishlist-service" && duration > 1ms }`
+![alt text](image-4.png)

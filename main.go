@@ -16,6 +16,7 @@ import (
 
 	"wishlist-service/api"
 	"wishlist-service/handlers"
+	"wishlist-service/tracing"
 )
 
 // responseWriter wrapper для получения статуса ответа
@@ -58,6 +59,16 @@ func setupLogger() *slog.Logger {
 
 func main() {
 	logger := setupLogger()
+	
+	// Инициализация трассировки
+	tempoEndpoint := "tempo:4318"
+	
+	if err := tracing.Init("wishlist-service", tempoEndpoint); err != nil {
+		logger.Warn("Failed to initialize tracing", slog.String("error", err.Error()))
+	} else {
+		defer tracing.Shutdown()
+		logger.Info("Tracing initialized", slog.String("endpoint", tempoEndpoint))
+	}
 	
 	r := chi.NewRouter()
 

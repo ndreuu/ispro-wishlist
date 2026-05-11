@@ -2,12 +2,16 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"wishlist-service/api"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 var logger *slog.Logger
@@ -63,8 +67,18 @@ func (h *WishlistHandler) GetWishlists(w http.ResponseWriter, r *http.Request) {
 
 func (h *WishlistHandler) CreateWishlist(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	ctx, span := otel.Tracer("wishlist-service").Start(r.Context(), "wishlist.create")
+	defer span.End()
+
 	var req api.CreateWishlistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+
+	_, decodeSpan := otel.Tracer("wishlist-service").Start(ctx, "wishlist.decode_request")
+	err := json.NewDecoder(r.Body).Decode(&req)
+	decodeSpan.End()
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "decode error")
 		logger.Warn("Failed to decode create wishlist request",
 			slog.String("error", err.Error()),
 			slog.String("remote_addr", r.RemoteAddr),
@@ -74,13 +88,16 @@ func (h *WishlistHandler) CreateWishlist(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	var wishlist api.Wishlist
+	var id int64
 
-	id := h.nextWishlistID
+	_, saveSpan := otel.Tracer("wishlist-service").Start(ctx, "wishlist.save_in_memory")
+	h.mu.Lock()
+
+	id = h.nextWishlistID
 	h.nextWishlistID++
 
-	wishlist := api.Wishlist{
+	wishlist = api.Wishlist{
 		Id:    id,
 		Name:  req.Name,
 		Owner: req.Owner,
@@ -90,24 +107,38 @@ func (h *WishlistHandler) CreateWishlist(w http.ResponseWriter, r *http.Request)
 	h.wishlists[id] = wishlist
 	updateWishlistsMetric(len(h.wishlists))
 
-	// Бизнес-метрики
-	wishlistsCreatedTotal.Inc()
+	h.mu.Unlock()
+	saveSpan.End()
 
-	// Бизнес-лог
+	_, metricsSpan := otel.Tracer("wishlist-service").Start(ctx, "wishlist.update_metrics")
+	wishlistsCreatedTotal.Inc()
+	metricsSpan.End()
+
 	logger.Info("Wishlist created",
 		slog.Int64("wishlist_id", id),
 		slog.String("name", req.Name),
 		slog.String("owner", req.Owner),
 	)
 
+	span.SetAttributes(
+		attribute.Int64("wishlist.id", id),
+		attribute.String("wishlist.name", req.Name),
+		attribute.String("wishlist.owner", req.Owner),
+	)
+
+	_, responseSpan := otel.Tracer("wishlist-service").Start(ctx, "wishlist.write_response")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	err := json.NewEncoder(w).Encode(wishlist)
+	err = json.NewEncoder(w).Encode(wishlist)
+	responseSpan.End()
 
 	status := "201"
 	if err != nil {
 		status = "500"
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "response encode error")
 	}
+
 	IncRequests("createWishlist", "POST", status)
 	ObserveRequestDuration("createWishlist", "POST", time.Since(start).Seconds())
 }
@@ -178,8 +209,13 @@ func (h *WishlistHandler) DeleteWishlist(w http.ResponseWriter, r *http.Request,
 
 func (h *WishlistHandler) AddWishlistItem(w http.ResponseWriter, r *http.Request, wishlistId int64) {
 	start := time.Now()
+	ctx, span := otel.Tracer("wishlist-service").Start(r.Context(), "wishlist.item.add")
+	defer span.End()
+
 	var req api.CreateWishlistItemRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "decode error")
 		logger.Warn("Failed to decode add item request",
 			slog.String("error", err.Error()),
 			slog.String("remote_addr", r.RemoteAddr),
@@ -194,6 +230,9 @@ func (h *WishlistHandler) AddWishlistItem(w http.ResponseWriter, r *http.Request
 
 	wishlist, ok := h.wishlists[wishlistId]
 	if !ok {
+		err := fmt.Errorf("wishlist not found: %d", wishlistId)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "not found")
 		logger.Warn("Wishlist not found for add item",
 			slog.Int64("wishlist_id", wishlistId),
 		)
@@ -226,6 +265,13 @@ func (h *WishlistHandler) AddWishlistItem(w http.ResponseWriter, r *http.Request
 		slog.String("title", req.Title),
 	)
 
+	span.SetAttributes(
+		attribute.Int64("wishlist.id", wishlistId),
+		attribute.Int64("item.id", itemID),
+		attribute.String("item.title", req.Title),
+		attribute.Float64("item.price", float64(*req.Price)),
+	)
+
 	// Обновляем метрики
 	totalItems := 0
 	for _, wl := range h.wishlists {
@@ -243,6 +289,7 @@ func (h *WishlistHandler) AddWishlistItem(w http.ResponseWriter, r *http.Request
 	}
 	IncRequests("addWishlistItem", "POST", status)
 	ObserveRequestDuration("addWishlistItem", "POST", time.Since(start).Seconds())
+	_ = ctx
 }
 
 func (h *WishlistHandler) DeleteWishlistItem(w http.ResponseWriter, r *http.Request, wishlistId int64, itemId int64) {

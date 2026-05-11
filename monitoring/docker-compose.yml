@@ -24,6 +24,20 @@ services:
     networks:
       - monitoring
 
+  tempo:
+    image: grafana/tempo:2.4.0
+    container_name: tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./tempo-config.yml:/etc/tempo/config.yml
+      - tempo_data:/tmp/tempo
+    command: -config.file=/etc/tempo/config.yml
+    networks:
+      - monitoring
+
   grafana:
     image: grafana/grafana:10.4.2
     container_name: grafana
@@ -38,6 +52,7 @@ services:
     depends_on:
       - prometheus
       - loki
+      - tempo
     networks:
       - monitoring
 
@@ -54,9 +69,26 @@ services:
     networks:
       - monitoring
 
+  wishlist-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: wishlist-service
+    ports:
+      - "8080:8080"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=tempo:4318
+    depends_on:
+      - tempo
+    networks:
+      - monitoring
+    volumes:
+      - /Users/a.p.oleynikov/projects/myshit/ispro-wishlist/logs:/app/logs
+
 networks:
   monitoring:
     driver: bridge
 
 volumes:
   grafana_data:
+  tempo_data:
