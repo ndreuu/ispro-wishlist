@@ -123,3 +123,6 @@ histogram_quantile(0.95, sum(rate(wishlist_service_items_in_response_bucket[5m])
 ### Медленные трейсы
 `{ resource.service.name = "wishlist-service" && duration > 1ms }`
 ![alt text](image-4.png)
+
+## Lab 6: CI/CD
+![alt text](image-5.png)

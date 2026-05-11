@@ -8,15 +8,14 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"wishlist-service/api"
+	"wishlist-service/handlers"
+	"wishlist-service/tracing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
-
-	"wishlist-service/api"
-	"wishlist-service/handlers"
-	"wishlist-service/tracing"
 )
 
 // responseWriter wrapper для получения статуса ответа
@@ -37,7 +36,7 @@ func setupLogger() *slog.Logger {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		log.Printf("Warning: could not create log directory: %v", err)
 	}
-	
+
 	// Создаём файл для логов
 	logFile, err := os.OpenFile(logDir+"/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -50,7 +49,7 @@ func setupLogger() *slog.Logger {
 
 	// Multi-writer: пишем и в файл, и в stdout
 	multiWriter := io.MultiWriter(os.Stdout, logFile)
-	
+
 	handler := slog.NewJSONHandler(multiWriter, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})
@@ -59,17 +58,17 @@ func setupLogger() *slog.Logger {
 
 func main() {
 	logger := setupLogger()
-	
+
 	// Инициализация трассировки
 	tempoEndpoint := "tempo:4318"
-	
+
 	if err := tracing.Init("wishlist-service", tempoEndpoint); err != nil {
 		logger.Warn("Failed to initialize tracing", slog.String("error", err.Error()))
 	} else {
 		defer tracing.Shutdown()
 		logger.Info("Tracing initialized", slog.String("endpoint", tempoEndpoint))
 	}
-	
+
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
@@ -86,14 +85,14 @@ func main() {
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			
+
 			wrapped := &responseWriter{
 				ResponseWriter: w,
 				status:         200,
 			}
-			
+
 			next.ServeHTTP(wrapped, r)
-			
+
 			// Логирование запроса
 			logger.Info("HTTP request",
 				slog.String("method", r.Method),
@@ -109,24 +108,27 @@ func main() {
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			
+
 			wrapped := &responseWriter{
 				ResponseWriter: w,
 				status:         200,
 			}
-			
+
 			next.ServeHTTP(wrapped, r)
-			
+
 			// Определяем endpoint
 			routePattern := ""
 			rctx := chi.RouteContext(r.Context())
-			if rctx != nil && rctx.RoutePattern != nil {
+			if rctx != nil {
 				routePattern = rctx.RoutePattern()
 			}
 			if routePattern == "" {
 				routePattern = r.URL.Path
 			}
-			
+			if routePattern == "" {
+				routePattern = r.URL.Path
+			}
+
 			handlers.IncRequests(routePattern, r.Method, strconv.Itoa(wrapped.status))
 			handlers.ObserveRequestDuration(routePattern, r.Method, time.Since(start).Seconds())
 		})

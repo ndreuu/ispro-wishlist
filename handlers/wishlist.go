@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"wishlist-service/api"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"wishlist-service/api"
 )
 
 var logger *slog.Logger

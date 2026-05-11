@@ -78,4 +78,3 @@ func ObserveRequestDuration(endpoint, method string, duration float64) {
 func IncRequests(endpoint, method, status string) {
 	httpRequestsTotal.WithLabelValues(endpoint, method, status).Inc()
 }
-
